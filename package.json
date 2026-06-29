@@ -1,0 +1,22 @@
+{
+  "name": "mailkite-pipedream",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MailKite components for Pipedream — inbound email Source + Send action.",
+  "homepage": "https://github.com/mailkite/pipedream",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mailkite/pipedream.git"
+  },
+  "license": "MIT",
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.13.0",
+    "eslint": "^9.13.0",
+    "globals": "^15.11.0"
+  }
+}
