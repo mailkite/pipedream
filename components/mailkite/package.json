@@ -1,6 +1,6 @@
 {
   "name": "@pipedream/mailkite",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Pipedream MailKite Components",
   "main": "mailkite.app.mjs",
   "type": "module",

@@ -7,7 +7,7 @@ export default {
   name: "New Inbound Email (Instant)",
   description:
     "Emit new event when an email arrives at a verified MailKite domain. [See the documentation](https://mailkite.dev/docs/).",
-  version: "0.0.1",
+  version: "0.0.2",
   type: "source",
   dedupe: "unique",
   props: {
@@ -26,9 +26,11 @@ export default {
     webhookSecret: {
       type: "string",
       secret: true,
-      label: "Webhook Signing Secret",
+      label: "Webhook Signing Secret Override",
       description:
-        "From your MailKite dashboard → **Webhooks**. When set, every event's `x-mailkite-signature` header is verified (HMAC-SHA256). Strongly recommended.",
+        "Signature verification (HMAC-SHA256) is on by default using the secret MailKite issues " +
+        "when this source registers its webhook — no setup needed. Set this only to override that " +
+        "secret (e.g. it was rotated in the MailKite dashboard → **Webhooks**).",
       optional: true,
     },
     ackMode: {
@@ -46,7 +48,19 @@ export default {
   },
   hooks: {
     async activate() {
-      const { webhookUrl } = await this.mailkite.setWebhook({
+      // A domain has one catch-all webhook route. Stash whatever is there before we replace
+      // it, so deactivate() can put it back instead of deleting the user's existing wiring.
+      const incumbent = await this.mailkite.getDomain({
+        domainId: this.domainId,
+      });
+      this.db.set(
+        "incumbentWebhook",
+        incumbent?.webhookUrl
+          ? { url: incumbent.webhookUrl, ackMode: incumbent.webhookAckMode ?? "lenient" }
+          : null,
+      );
+
+      const { webhookUrl, signingSecret } = await this.mailkite.setWebhook({
         domainId: this.domainId,
         data: {
           url: this.http.endpoint,
@@ -54,15 +68,29 @@ export default {
         },
       });
       this.db.set("webhookUrl", webhookUrl);
+      // Persist the secret MailKite just handed us so verification is on by default; the
+      // `webhookSecret` prop remains only as an override (see run()).
+      this.db.set("signingSecret", signingSecret);
     },
     async deactivate() {
-      await this.mailkite.deleteWebhook({
-        domainId: this.domainId,
-      });
+      const incumbent = this.db.get("incumbentWebhook");
+      if (incumbent) {
+        await this.mailkite.setWebhook({
+          domainId: this.domainId,
+          data: {
+            url: incumbent.url,
+            ackMode: incumbent.ackMode,
+          },
+        });
+      } else {
+        await this.mailkite.deleteWebhook({
+          domainId: this.domainId,
+        });
+      }
     },
   },
   methods: {
-    verifySignature(signatureHeader, rawBody) {
+    verifySignature(secret, signatureHeader, rawBody) {
       if (!signatureHeader) {
         return false;
       }
@@ -73,7 +101,7 @@ export default {
         return false;
       }
       const expected = crypto
-        .createHmac("sha256", this.webhookSecret)
+        .createHmac("sha256", secret)
         .update(`${parts.t}.${rawBody}`)
         .digest("hex");
       const a = Buffer.from(expected);
@@ -104,9 +132,11 @@ export default {
       });
     }
 
-    // 2) Verify the signature over the exact raw body MailKite signed.
+    // 2) Verify the signature over the exact raw body MailKite signed. The secret persisted at
+    // activate() makes this always-on; `webhookSecret` only overrides it (e.g. after rotation).
+    const secret = this.webhookSecret || this.db.get("signingSecret");
     const raw = bodyRaw ?? JSON.stringify(body);
-    if (this.webhookSecret && !this.verifySignature(headers["x-mailkite-signature"], raw)) {
+    if (secret && !this.verifySignature(secret, headers["x-mailkite-signature"], raw)) {
       console.log("Rejected event: invalid x-mailkite-signature");
       return;
     }

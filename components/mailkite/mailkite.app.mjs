@@ -49,6 +49,17 @@ export default {
         ...opts,
       });
     },
+    // GET /api/domains/:id — returns `{ domain, dns }`; `domain.webhookUrl` /
+    // `domain.webhookAckMode` are the domain's current catch-all webhook route, if any.
+    async getDomain({
+      domainId, ...opts
+    }) {
+      const { domain } = await this._request({
+        path: `/api/domains/${domainId}`,
+        ...opts,
+      });
+      return domain;
+    },
     // PUT /api/domains/:id/webhook — register a Source's endpoint for inbound mail.
     async setWebhook({
       domainId, ...opts
