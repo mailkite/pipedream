@@ -24,6 +24,12 @@ components/mailkite/
 │   └── test-event.mjs                     # sample email.received payload
 └── actions/send-email/
     └── send-email.mjs                     # Send Email action
+
+test/
+├── new-inbound-email.test.mjs             # signature + freshness + run() gate (node --test)
+├── register-stubs.mjs                     # --import entrypoint for the resolution hook
+├── stub-loader.mjs                        # resolves @pipedream/platform locally
+└── stubs/pipedream-platform.mjs           # throwing stand-in — tests never hit the network
 ```
 
 This repo is the **canonical home** for MailKite's Pipedream components. They are contributed to
@@ -34,8 +40,8 @@ what lists them at `pipedream.com/apps/mailkite`.
 
 ⏳ **Awaiting Pipedream app creation.** A registry PR can only attach to an app that exists in
 Pipedream's system. We've requested the `mailkite` app (API-key auth) via Pipedream's
-new-app process — see [`PLAN.md`](PLAN.md). All component code here is complete and lints clean
-in the meantime.
+new-app process — see [`PLAN.md`](PLAN.md). All component code here is complete, lints clean, and
+passes its test suite in the meantime.
 
 ## Getting it listed (PR into the registry)
 
@@ -58,7 +64,12 @@ in the meantime.
 ```sh
 npm install
 npm run lint
+npm test        # node --test, no test framework and no Pipedream account needed
 ```
+
+`npm test` imports the component files that actually ship. `@pipedream/platform` only resolves
+inside Pipedream's own tooling, so `test/stub-loader.mjs` (a built-in Node resolution hook)
+swaps it for a stub that throws if anything tries to make an HTTP call.
 
 ## License
 
