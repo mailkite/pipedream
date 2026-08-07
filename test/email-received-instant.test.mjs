@@ -9,8 +9,8 @@ import {
   describe, it, mock,
 } from "node:test";
 
-import source, { FRESHNESS_MS } from "../components/mailkite/sources/new-inbound-email/new-inbound-email.mjs";
-import sampleEmit from "../components/mailkite/sources/new-inbound-email/test-event.mjs";
+import source, { FRESHNESS_MS } from "../components/mailkite/sources/email-received-instant/email-received-instant.mjs";
+import sampleEmit from "../components/mailkite/sources/email-received-instant/test-event.mjs";
 
 const SECRET = "whsec_0123456789abcdef0123456789abcdef";
 

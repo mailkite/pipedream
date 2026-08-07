@@ -8,13 +8,24 @@ import sampleEmit from "./test-event.mjs";
 export const FRESHNESS_MS = 5 * 60 * 1000;
 
 export default {
-  key: "mailkite-new-inbound-email",
+  key: "mailkite-email-received-instant",
   name: "New Inbound Email (Instant)",
   description:
-    "Emit new event when an email arrives at a verified MailKite domain. [See the documentation](https://mailkite.dev/docs/).",
-  version: "0.0.3",
+    "Emit new event when an email arrives at a verified MailKite domain. A domain has a single " +
+    "catch-all webhook route, so deploying this source takes it over; whatever the domain pointed " +
+    "at before is restored when the source is deleted. [See the documentation](https://mailkite.dev/docs/).",
+  version: "0.0.4",
   type: "source",
   dedupe: "unique",
+  annotations: {
+    // The source itself only reads mail as it arrives, but its lifecycle hooks write the
+    // domain's webhook route (PUT on activate, restore-or-delete on deactivate) — so it is
+    // not read-only. Nothing it does is irreversible: deactivate() puts back the webhook the
+    // domain had before, rather than dropping it.
+    destructiveHint: false,
+    openWorldHint: true,
+    readOnlyHint: false,
+  },
   props: {
     mailkite,
     db: "$.service.db",

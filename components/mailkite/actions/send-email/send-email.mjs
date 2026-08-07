@@ -5,7 +5,7 @@ export default {
   name: "Send Email",
   description:
     "Send an email from a verified MailKite domain. [See the documentation](https://mailkite.dev/docs/).",
-  version: "0.0.1",
+  version: "0.0.2",
   type: "action",
   annotations: {
     destructiveHint: false,

@@ -19,14 +19,14 @@ components/mailkite/
 ├── mailkite.app.mjs                       # auth + shared HTTP methods
 ├── package.json                           # component manifest (@pipedream/platform)
 ├── README.md                              # marketplace-rendered docs
-├── sources/new-inbound-email/
-│   ├── new-inbound-email.mjs              # the (Instant) webhook trigger
+├── sources/email-received-instant/
+│   ├── email-received-instant.mjs         # the (Instant) webhook trigger
 │   └── test-event.mjs                     # sample email.received payload
 └── actions/send-email/
     └── send-email.mjs                     # Send Email action
 
 test/
-├── new-inbound-email.test.mjs             # signature + freshness + run() gate (node --test)
+├── email-received-instant.test.mjs        # signature + freshness + run() gate (node --test)
 ├── register-stubs.mjs                     # --import entrypoint for the resolution hook
 ├── stub-loader.mjs                        # resolves @pipedream/platform locally
 └── stubs/pipedream-platform.mjs           # throwing stand-in — tests never hit the network
@@ -51,8 +51,8 @@ passes its test suite in the meantime.
    `components/mailkite/` into the fork's `components/mailkite/`.
 4. Iterate locally:
    ```sh
-   pd publish components/mailkite/sources/new-inbound-email/new-inbound-email.mjs --dev
-   pd dev     components/mailkite/sources/new-inbound-email/new-inbound-email.mjs
+   pd publish components/mailkite/sources/email-received-instant/email-received-instant.mjs --dev
+   pd dev     components/mailkite/sources/email-received-instant/email-received-instant.mjs
    pd events  <source-name>     # watch events as real mail arrives
    pd publish components/mailkite/actions/send-email/send-email.mjs --dev
    ```

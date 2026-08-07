@@ -23,9 +23,9 @@ Phased build of the MailKite app for the Pipedream registry: an inbound **Source
 
 ## Phase 3 — Components
 - [x] `actions/send-email/send-email.mjs` — `POST /v1/send`
-- [x] `sources/new-inbound-email/new-inbound-email.mjs` — Instant webhook trigger
+- [x] `sources/email-received-instant/email-received-instant.mjs` — Instant webhook trigger
       (register on `activate`, HMAC-SHA256 signature verify, emit `email.received`)
-- [x] `sources/new-inbound-email/test-event.mjs`
+- [x] `sources/email-received-instant/test-event.mjs`
 - [x] Lint clean · commit · push
 
 ## Phase 4 — Docs + finalize
