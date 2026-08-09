@@ -23,7 +23,7 @@ export default {
     "Emit new event when an email arrives at a verified MailKite domain. A domain has a single " +
     "catch-all webhook route, so deploying this source takes it over; whatever the domain pointed " +
     "at before is restored when the source is deleted. [See the documentation](https://mailkite.dev/docs/).",
-  version: "0.0.5",
+  version: "0.0.6",
   type: "source",
   dedupe: "unique",
   annotations: {

@@ -14,7 +14,9 @@ This app provides two components:
   authentication results (`spf`/`dkim`/`dmarc`/`spam`), and `attachments` (with signed download
   URLs).
 - **Send Email** — an action that sends a message from a verified domain: `to`/`cc`/`bcc`,
-  `subject`, `html`/`text`, `reply-to`, and saved or base templates with merge data.
+  `subject`, `html`/`text`, `reply-to`, threading (`in-reply-to`), attachments, extra MIME
+  headers, saved or base templates with merge data, per-send open/click tracking, and
+  send-later scheduling.
 
 ## Example Use Cases
 
@@ -38,7 +40,10 @@ This app provides two components:
    up to **50** of the domain's most recent stored emails, so the workflow has real events to build
    against before the next message arrives.
 5. **To send:** add the *Send Email* action, set the `From` to an address on a verified domain, and
-   provide `html`/`text` or a `Template ID`.
+   provide `html`/`text` or a `Template ID`. To attach a file, add an entry to **Attachments** —
+   an object with `filename` plus either `url` (fetched at send time; preferred for large files)
+   or `content` (base64 bytes). To send later, set **Schedule Send** to an ISO 8601 timestamp,
+   `in 2 hours`, or a ms-epoch.
 
 ## Troubleshooting
 
@@ -54,6 +59,14 @@ This app provides two components:
 - **Send rejected?** The `From` address must be on a **verified sending domain** (SPF + DKIM).
   Provide at least one of `html`, `text`, or a `Template ID`, plus a `Subject` (unless the template
   supplies one).
+- **Scheduled send says `scheduled`, not `sent`?** That is the success case: a future
+  **Schedule Send** parks the message and the step returns an `ssnd_…` id with
+  `status: "scheduled"`, cancelable via `DELETE /v1/scheduled/{id}`. The step summary says so.
+  Note that **open/click tracking is not applied to scheduled sends** — set them on immediate
+  sends only.
+- **Tracking flags doing nothing?** They apply to **HTML** sends only (there is nothing to
+  rewrite in a plain-text body). Leaving them unset is not the same as setting them to `false`:
+  unset means "use the sending domain's default", `false` forces the flag off for this send.
 - **MailKite retrying deliveries?** If you set **Acknowledgement Mode** to `ack`, the source must
   return `2xx` with `{"status":"ok"}` — it does this automatically; leave it on `lenient` if your
   downstream steps are slow.

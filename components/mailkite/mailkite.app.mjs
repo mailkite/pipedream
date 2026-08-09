@@ -197,10 +197,13 @@ export default {
      * Send an email — `POST /v1/send`.
      *
      * @param {object} [opts={}] - Request options.
-     * @param {object} opts.data - Send body: `from`, `to` (array), and one of `subject`+
-     * `html`/`text` or `templateId`; `cc`, `bcc`, `replyTo`, `templateData` optional.
-     * @returns {Promise<object>} `{ id, status }` — `status` is `scheduled` for a future
-     * `scheduledAt`, otherwise the accepted-for-delivery status.
+     * @param {object} opts.data - Send body. Required: `from`, `to` (string or array), and one
+     * of `subject` + `html`/`text` or `templateId`. Optional: `cc`, `bcc`, `replyTo`,
+     * `inReplyTo`, `attachments`, `headers`, `templateData`, `scheduledAt`, `trackOpens`,
+     * `trackClicks` — the full documented request body (`sdks/spec/schemas/send-request.json`).
+     * @returns {Promise<object>} `{ id, status }`, plus `scheduledAt` (ms epoch) when a future
+     * `scheduledAt` parked the message: then `status` is `scheduled` and `id` is an `ssnd_…`
+     * scheduled-send id, not a `msg_…`.
      */
     async sendEmail(opts = {}) {
       return this._request({
