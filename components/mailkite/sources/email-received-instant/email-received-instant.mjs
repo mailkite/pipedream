@@ -1,11 +1,20 @@
 import crypto from "crypto";
 import mailkite from "../../mailkite.app.mjs";
+import { toEmailReceivedEvent } from "../../common/message-to-event.mjs";
 import sampleEmit from "./test-event.mjs";
 
 // Reject a delivery whose signature timestamp is further than this from now, in either
 // direction, so a captured delivery cannot be replayed forever. Same window the MailKite
 // SDKs enforce (`DEFAULT_TOLERANCE_MS` in `sdks/node/index.js`).
 export const FRESHNESS_MS = 5 * 60 * 1000;
+
+// deploy() backfill bounds. Pipedream's guideline is at most 50 historical events on first
+// deploy. `/api/messages` has no domain or direction filter, so those 50 are selected
+// client-side out of pages of the account's newest mail — hence a page size and a page cap
+// (50 for this domain could otherwise walk the whole account).
+export const BACKFILL_LIMIT = 50;
+export const BACKFILL_PAGE_SIZE = 200; // the API's maximum `limit`
+export const BACKFILL_MAX_PAGES = 5;
 
 export default {
   key: "mailkite-email-received-instant",
@@ -14,7 +23,7 @@ export default {
     "Emit new event when an email arrives at a verified MailKite domain. A domain has a single " +
     "catch-all webhook route, so deploying this source takes it over; whatever the domain pointed " +
     "at before is restored when the source is deleted. [See the documentation](https://mailkite.dev/docs/).",
-  version: "0.0.4",
+  version: "0.0.5",
   type: "source",
   dedupe: "unique",
   annotations: {
@@ -63,6 +72,26 @@ export default {
     },
   },
   hooks: {
+    async deploy() {
+      // Backfill so the source is not empty until the next email arrives. Bounded at
+      // BACKFILL_LIMIT events per Pipedream's guideline; emitted oldest-first so the event
+      // list reads chronologically, and keyed on the message id, so the live webhook for a
+      // message that arrives mid-backfill is deduped rather than emitted twice.
+      const rows = await this.listBackfillRows();
+      for (const row of rows.slice().reverse()) {
+        try {
+          const {
+            message, attachments,
+          } = await this.mailkite.getMessage({
+            messageId: row.id,
+          });
+          this.emitEvent(toEmailReceivedEvent(message, attachments));
+        } catch (err) {
+          // One unreadable message must not cost the user the other 49.
+          console.log(`Skipped ${row.id} during backfill: ${err.message}`);
+        }
+      }
+    },
     async activate() {
       // A domain has one catch-all webhook route. Stash whatever is there before we replace
       // it, so deactivate() can put it back instead of deleting the user's existing wiring.
@@ -106,6 +135,79 @@ export default {
     },
   },
   methods: {
+    /**
+     * Emit one `email.received` payload, from either path — the live webhook or the deploy()
+     * backfill — so both produce identical events.
+     *
+     * `ts` is the message's arrival time, not the clock: a backfilled event has to land in the
+     * timeline where the email actually arrived, and for a live delivery the two are the same
+     * instant anyway.
+     *
+     * @param {object} payload - An `email.received` event body.
+     */
+    emitEvent(payload) {
+      this.$emit(payload, {
+        id: payload.id,
+        summary: `New email from ${payload.from?.address}: ${payload.subject ?? "(no subject)"}`,
+        ts: payload.receivedAt ?? Date.now(),
+      });
+    },
+    /**
+     * Select the messages deploy() should backfill: inbound mail to the chosen domain, newest
+     * first, at most BACKFILL_LIMIT of them.
+     *
+     * Every filter here exists because `GET /api/messages` cannot express it. The endpoint has
+     * no domain filter and no direction filter, so it returns the account's outbound sends and
+     * every other domain's mail too; and rows whose bodies are encrypted at rest (`enc_key_fp`)
+     * are stored as ciphertext the API never decrypts, so backfilling one would emit an event
+     * whose `text`/`html` are unreadable — those are skipped and counted in the log instead.
+     *
+     * @returns {Promise<object[]>} Selected list rows, newest first.
+     */
+    async listBackfillRows() {
+      const domain = await this.mailkite.getDomain({
+        domainId: this.domainId,
+      });
+      const suffix = `@${String(domain?.domain ?? "").toLowerCase()}`;
+      const selected = [];
+      const seen = new Set();
+      let encrypted = 0;
+      let before;
+      for (let page = 0; page < BACKFILL_MAX_PAGES && selected.length < BACKFILL_LIMIT; page++) {
+        const rows = await this.mailkite.listMessages({
+          limit: BACKFILL_PAGE_SIZE,
+          before,
+        });
+        if (!rows?.length) break;
+        let fresh = 0;
+        for (const row of rows) {
+          if (seen.has(row.id)) continue;
+          seen.add(row.id);
+          fresh++;
+          if (selected.length >= BACKFILL_LIMIT) continue;
+          if (row.direction !== "inbound") continue;
+          if (!String(row.to_addr ?? "").toLowerCase().endsWith(suffix)) continue;
+          if (row.enc_key_fp) {
+            encrypted++;
+            continue;
+          }
+          selected.push(row);
+        }
+        // `before` is exclusive, so paging on the last row's timestamp would drop any row
+        // sharing that millisecond; `+ 1` keeps them and `seen` absorbs the re-read overlap.
+        // A page that is entirely overlap means the cursor cannot advance — stop rather than
+        // spin. A short page is the end of the list.
+        if (!fresh || rows.length < BACKFILL_PAGE_SIZE) break;
+        before = rows[rows.length - 1].received_at + 1;
+      }
+      if (encrypted) {
+        console.log(
+          `Backfill skipped ${encrypted} message(s) stored encrypted at rest — their bodies ` +
+          "cannot be read back through the API. Live deliveries are unaffected.",
+        );
+      }
+      return selected;
+    },
     /**
      * Verify an `x-mailkite-signature: t=<ms>,v1=<hex>` header over the exact bytes MailKite
      * signed. Mirrors the canonical verifier — `MailKite.verifyWebhook` in the MailKite Node
@@ -188,11 +290,7 @@ export default {
       return;
     }
 
-    this.$emit(body, {
-      id: body.id,
-      summary: `New email from ${body.from?.address}: ${body.subject ?? "(no subject)"}`,
-      ts: Date.now(),
-    });
+    this.emitEvent(body);
   },
   sampleEmit,
 };

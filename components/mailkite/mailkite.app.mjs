@@ -133,6 +133,67 @@ export default {
       });
     },
     /**
+     * List stored messages, newest first — `GET /api/messages`. The response is a bare array;
+     * the caller infers "there is more" from page fullness and pages with `before`.
+     *
+     * Two things this endpoint does NOT do, both of which the backfill has to handle itself:
+     * there is no domain filter (only a `search` substring), so recipients are matched
+     * client-side; and the list query omits `text_body`/`html_body`/`headers_json` for payload
+     * size, so a row here is not a webhook payload — fetch `getMessage()` for the bodies.
+     *
+     * @param {object} [opts={}] - Request options.
+     * @param {number} [opts.limit] - Page size, 1–200 (the API defaults to 100).
+     * @param {number} [opts.before] - Cursor: return only messages with `received_at` below this.
+     * @returns {Promise<object[]>} Message list rows (`{ id, direction, from, to, subject,
+     * received_at, enc_key_fp, … }`), newest first.
+     */
+    async listMessages({
+      limit, before, ...opts
+    } = {}) {
+      return this._request({
+        path: "/api/messages",
+        params: {
+          ...(limit === undefined
+            ? {}
+            : {
+              limit,
+            }),
+          ...(before === undefined
+            ? {}
+            : {
+              before,
+            }),
+        },
+        ...opts,
+      });
+    },
+    /**
+     * Fetch one stored message with its attachments — `GET /api/messages/:id`. This is the
+     * only place the bodies and the attachment list live; the detail response also carries
+     * delivery/event/tracking sections, which are dropped here as the source has no use for
+     * them.
+     *
+     * @param {object} opts - Request options.
+     * @param {string} opts.messageId - Message id (`msg_…`).
+     * @returns {Promise<{message: object, attachments: object[]}>} The full row (including
+     * `text_body`/`html_body` and the structured `from`/`to`) and its attachments, each with a
+     * signed 7-day `url`.
+     */
+    async getMessage({
+      messageId, ...opts
+    }) {
+      const {
+        message, attachments,
+      } = await this._request({
+        path: `/api/messages/${messageId}`,
+        ...opts,
+      });
+      return {
+        message,
+        attachments: attachments ?? [],
+      };
+    },
+    /**
      * Send an email — `POST /v1/send`.
      *
      * @param {object} [opts={}] - Request options.

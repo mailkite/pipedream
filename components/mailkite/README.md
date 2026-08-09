@@ -31,9 +31,12 @@ This app provides two components:
 2. **Verify the domain's DNS** — MX (to receive) and SPF + DKIM (to send). Inbound and outbound
    are gated until the relevant records verify.
 3. **Connect your account** in Pipedream using a MailKite **API key** (`mk_live_…`).
-4. **To receive:** add the *New Inbound Email* source, pick your verified domain, and (recommended)
-   paste the **Webhook Signing Secret** from your MailKite dashboard so signatures are verified.
-   The source registers its endpoint with MailKite automatically.
+4. **To receive:** add the *New Inbound Email* source and pick your verified domain — that is the
+   whole setup. The source registers its endpoint with MailKite, keeps the signing secret MailKite
+   issues, and verifies every delivery's signature with no further steps. (Set **Webhook Signing
+   Secret Override** only if you rotate the secret in the dashboard.) On first deploy it backfills
+   up to **50** of the domain's most recent stored emails, so the workflow has real events to build
+   against before the next message arrives.
 5. **To send:** add the *Send Email* action, set the `From` to an address on a verified domain, and
    provide `html`/`text` or a `Template ID`.
 
@@ -42,6 +45,9 @@ This app provides two components:
 - **No inbound events?** The domain must be **MX-verified** — the domain picker only lists
   MX-verified domains, and webhook registration is rejected otherwise. Confirm mail is actually
   reaching MailKite (check the dashboard's message log).
+- **Backfill came up short?** It only covers mail **stored** by MailKite: a zero-retention domain
+  keeps nothing to replay, and messages encrypted at rest are skipped (their bodies can't be read
+  back through the API — the source logs how many). Live deliveries are unaffected either way.
 - **Signature check failing?** Make sure the **Webhook Signing Secret** matches the one in your
   MailKite dashboard. The signature is HMAC-SHA256 over `` `${timestamp}.${rawBody}` `` and the
   header is `x-mailkite-signature: t=<ms>,v1=<hex>`.
