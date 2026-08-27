@@ -254,21 +254,24 @@ function harness({
  * @param {object} [opts] - Overrides.
  * @param {object} [opts.body] - Parsed payload.
  * @param {string} [opts.header] - `x-mailkite-signature` value; omit for none.
+ * @param {boolean} [opts.omitBodyRaw] - Simulate a runtime that hands no `bodyRaw` at all.
+ * @param {boolean} [opts.nullBodyRaw] - Simulate `bodyRaw: null` (treated the same as absent).
  * @returns {object} The event.
  */
 function delivery({
-  body = sampleEmit, header,
+  body = sampleEmit, header, omitBodyRaw = false, nullBodyRaw = false,
 } = {}) {
   const bodyRaw = JSON.stringify(body);
-  return {
+  const event = {
     body,
-    bodyRaw,
     headers: header === undefined
       ? {}
       : {
         "x-mailkite-signature": header,
       },
   };
+  if (!omitBodyRaw) event.bodyRaw = nullBodyRaw ? null : bodyRaw;
+  return event;
 }
 
 describe("run() — the verification gate", () => {
@@ -401,5 +404,76 @@ describe("run() — the verification gate", () => {
       status: "ok",
     });
     assert.equal(h.emitted.length, 1);
+  });
+});
+
+describe("run() — absent bodyRaw (C2)", () => {
+  it("drops a signed delivery when the runtime provides no bodyRaw, logging why", async () => {
+    const h = harness({
+      db: {
+        signingSecret: SECRET,
+      },
+    });
+    const logs = [];
+    mock.method(console, "log", (msg) => logs.push(msg));
+    await h.run(delivery({
+      header: sign(RAW).header,
+      omitBodyRaw: true,
+    }));
+    mock.restoreAll();
+
+    assert.equal(h.emitted.length, 0, "no bodyRaw ⇒ nothing to verify against ⇒ never emitted");
+    assert.equal(h.responses.length, 1, "MailKite is still answered, so it stops retrying");
+    assert.equal(h.responses[0].status, 200);
+    assert.equal(logs.length, 1, "the drop is logged, not silent");
+    assert.match(logs[0], /bodyRaw/, "the log names the missing field");
+    assert.match(logs[0], /cannot be verified/, "the log says why the signature check failed");
+  });
+
+  it("treats bodyRaw: null the same as absent", async () => {
+    const h = harness({
+      db: {
+        signingSecret: SECRET,
+      },
+    });
+    const logs = [];
+    mock.method(console, "log", (msg) => logs.push(msg));
+    await h.run(delivery({
+      header: sign(RAW).header,
+      nullBodyRaw: true,
+    }));
+    mock.restoreAll();
+
+    assert.equal(h.emitted.length, 0);
+    assert.equal(logs.length, 1);
+    assert.match(logs[0], /bodyRaw/);
+  });
+
+  it("still verifies byte-exactly when bodyRaw is present", async () => {
+    const h = harness({
+      db: {
+        signingSecret: SECRET,
+      },
+    });
+    await h.run(delivery({
+      header: sign(RAW).header,
+    }));
+
+    assert.equal(h.emitted.length, 1, "the happy path is unchanged");
+  });
+
+  it("does not gate on bodyRaw when no secret is configured", async () => {
+    const h = harness();
+    const logs = [];
+    mock.method(console, "log", (msg) => logs.push(msg));
+    await h.run(delivery({
+      omitBodyRaw: true,
+    }));
+    mock.restoreAll();
+
+    // Pre-A1 behavior: with no secret there is nothing to verify, so the delivery passes
+    // through. The C2 gate only guards the verification path; it does not change this.
+    assert.equal(h.emitted.length, 1);
+    assert.equal(logs.length, 0);
   });
 });

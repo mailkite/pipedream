@@ -23,7 +23,7 @@ export default {
     "Emit new event when an email arrives at a verified MailKite domain. A domain has a single " +
     "catch-all webhook route, so deploying this source takes it over; whatever the domain pointed " +
     "at before is restored when the source is deleted. [See the documentation](https://mailkite.dev/docs/).",
-  version: "0.0.6",
+  version: "0.0.7",
   type: "source",
   dedupe: "unique",
   annotations: {
@@ -278,11 +278,25 @@ export default {
     // recent (see FRESHNESS_MS) — otherwise a delivery captured once replays forever. The
     // secret persisted at activate() makes this always-on; `webhookSecret` only overrides it
     // (e.g. after rotation).
+    //
+    // Verification runs over `bodyRaw` only. `JSON.stringify(body)` re-serializes the parsed
+    // payload and cannot reproduce the exact bytes MailKite signed (key order, whitespace,
+    // number formatting), so an HMAC computed over it can never match — that was a silent
+    // data-loss path, not a verification. If this runtime hands us no `bodyRaw` there is
+    // nothing to verify against: fail closed and say why.
     const secret = this.webhookSecret || this.db.get("signingSecret");
-    const raw = bodyRaw ?? JSON.stringify(body);
-    if (secret && !this.verifySignature(secret, headers["x-mailkite-signature"], raw)) {
-      console.log("Rejected event: invalid or stale x-mailkite-signature");
-      return;
+    if (secret) {
+      if (bodyRaw == null) {
+        console.log(
+          "Rejected event: event.bodyRaw is unavailable, so the x-mailkite-signature cannot " +
+          "be verified — dropped rather than emitted unverified",
+        );
+        return;
+      }
+      if (!this.verifySignature(secret, headers["x-mailkite-signature"], bodyRaw)) {
+        console.log("Rejected event: invalid or stale x-mailkite-signature");
+        return;
+      }
     }
 
     // 3) Only emit inbound mail.

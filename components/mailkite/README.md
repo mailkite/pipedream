@@ -56,6 +56,11 @@ This app provides two components:
 - **Signature check failing?** Make sure the **Webhook Signing Secret** matches the one in your
   MailKite dashboard. The signature is HMAC-SHA256 over `` `${timestamp}.${rawBody}` `` and the
   header is `x-mailkite-signature: t=<ms>,v1=<hex>`.
+- **Source logs say `event.bodyRaw is unavailable`?** That is the fail-closed path: the Pipedream
+  runtime did not hand the source the raw request body, so there is nothing to verify the
+  signature against — the delivery is dropped rather than emitted unverified. It should not
+  happen on Pipedream's current HTTP-source runtime (which exposes `bodyRaw`); if it does,
+  check the runtime's release notes.
 - **Send rejected?** The `From` address must be on a **verified sending domain** (SPF + DKIM).
   Provide at least one of `html`, `text`, or a `Template ID`, plus a `Subject` (unless the template
   supplies one).

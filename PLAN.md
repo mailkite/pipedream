@@ -44,5 +44,9 @@ Phased build of the MailKite app for the Pipedream registry: an inbound **Source
 | Signature | header `x-mailkite-signature: t=<ms>,v1=<hex>` · HMAC-SHA256 over `` `${t}.${rawBody}` `` |
 
 ## Pre-PR checks still open
-- [ ] Confirm Pipedream exposes `event.bodyRaw` for the HTTP source (needed for byte-exact HMAC).
+- [x] ~~Confirm Pipedream exposes `event.bodyRaw` for the HTTP source~~ — **C2 done 2026-08-27**:
+      the source no longer depends on the answer. `bodyRaw` present → byte-exact verification;
+      absent → an explicit logged drop (fail closed) instead of an HMAC that could never match
+      the signed bytes. Confirming the runtime fact itself stays a `pd dev` item, still gated
+      on the app existing.
 - [ ] App created by Pipedream + `api_key` auth field present → then `pd login`, `pd dev`, open PR.
