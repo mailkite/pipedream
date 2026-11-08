@@ -1,6 +1,6 @@
 # MailKite for Pipedream
 
-Official [MailKite](https://mailkite.dev) components for [Pipedream](https://pipedream.com) —
+Official [MailKite](https://mailkite.dev/?utm_source=pipedream&utm_medium=integration&utm_campaign=components) components for [Pipedream](https://pipedream.com) —
 the **inbound-email wedge** that Pipedream's built-in triggers leave open.
 
 - 📥 **New Inbound Email (Instant)** — trigger a workflow when an email arrives at **your own

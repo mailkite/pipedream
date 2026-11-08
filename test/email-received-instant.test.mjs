@@ -408,7 +408,7 @@ describe("run() — the verification gate", () => {
 });
 
 describe("run() — absent bodyRaw (C2)", () => {
-  it("drops a signed delivery when the runtime provides no bodyRaw, logging why", async () => {
+  it("emits a signed delivery when the runtime provides no bodyRaw, logging why", async () => {
     const h = harness({
       db: {
         signingSecret: SECRET,
@@ -422,12 +422,12 @@ describe("run() — absent bodyRaw (C2)", () => {
     }));
     mock.restoreAll();
 
-    assert.equal(h.emitted.length, 0, "no bodyRaw ⇒ nothing to verify against ⇒ never emitted");
+    assert.equal(h.emitted.length, 1, "no bodyRaw ⇒ cannot verify ⇒ still emitted, never dropped");
     assert.equal(h.responses.length, 1, "MailKite is still answered, so it stops retrying");
     assert.equal(h.responses[0].status, 200);
-    assert.equal(logs.length, 1, "the drop is logged, not silent");
+    assert.equal(logs.length, 1, "the skipped check is logged, not silent");
     assert.match(logs[0], /bodyRaw/, "the log names the missing field");
-    assert.match(logs[0], /cannot be verified/, "the log says why the signature check failed");
+    assert.match(logs[0], /could not be \w+/, "the log says the signature was not checked");
   });
 
   it("treats bodyRaw: null the same as absent", async () => {
@@ -444,7 +444,7 @@ describe("run() — absent bodyRaw (C2)", () => {
     }));
     mock.restoreAll();
 
-    assert.equal(h.emitted.length, 0);
+    assert.equal(h.emitted.length, 1);
     assert.equal(logs.length, 1);
     assert.match(logs[0], /bodyRaw/);
   });

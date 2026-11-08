@@ -1,6 +1,6 @@
 # MailKite
 
-[MailKite](https://mailkite.dev) is developer-first email infrastructure: **receive email as a
+[MailKite](https://mailkite.dev/?utm_source=pipedream&utm_medium=integration&utm_campaign=components-detail) is developer-first email infrastructure: **receive email as a
 clean JSON webhook** and **send email with one API call**, on your own verified domains.
 
 ## Overview
@@ -29,7 +29,7 @@ This app provides two components:
 
 ## Getting Started
 
-1. **Create a MailKite account** and add a domain at [mailkite.dev](https://mailkite.dev).
+1. **Create a MailKite account** and add a domain at [mailkite.dev](https://mailkite.dev/?utm_source=pipedream&utm_medium=integration&utm_campaign=components-detail).
 2. **Verify the domain's DNS** — MX (to receive) and SPF + DKIM (to send). Inbound and outbound
    are gated until the relevant records verify.
 3. **Connect your account** in Pipedream using a MailKite **API key** (`mk_live_…`).

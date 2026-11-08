@@ -186,8 +186,8 @@ export default {
   key: "mailkite-send-email",
   name: "Send Email",
   description:
-    "Send an email from a verified MailKite domain — immediately, or at a scheduled time. [See the documentation](https://mailkite.dev/docs/).",
-  version: "0.0.4",
+    "Send an email from a verified MailKite domain — immediately, or at a scheduled time. [See the documentation](https://mailkite.dev/docs?utm_source=pipedream&utm_medium=integration&utm_campaign=components).",
+  version: "0.0.1",
   type: "action",
   annotations: {
     destructiveHint: false,
