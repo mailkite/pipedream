@@ -437,9 +437,11 @@ describe("scheduledAt", () => {
     assert.equal(normalizeScheduledAt(null), undefined);
   });
 
-  it("passes a real number through and drops a non-finite one", () => {
+  it("passes a real number through and rejects a non-finite one", () => {
     assert.equal(normalizeScheduledAt(1787216400000), 1787216400000);
-    assert.equal(normalizeScheduledAt(NaN), undefined);
+    // Silently dropping it would remove `scheduledAt` and send the mail immediately.
+    assert.throws(() => normalizeScheduledAt(NaN), /must be a finite time/);
+    assert.throws(() => normalizeScheduledAt(Infinity), /must be a finite time/);
   });
 });
 

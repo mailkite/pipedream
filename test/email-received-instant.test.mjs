@@ -496,6 +496,7 @@ function lifecycleHarness({
   const store = {
     ...db,
   };
+  let currentUrl = domainUrl;
   const ctx = {
     domainId: "dom_9f21",
     http: {
@@ -516,7 +517,7 @@ function lifecycleHarness({
         if (getDomainError) throw new Error(getDomainError);
         return {
           id: args.domainId,
-          webhookUrl: domainUrl,
+          webhookUrl: currentUrl,
         };
       },
       setWebhook: async (args) => {
@@ -543,6 +544,9 @@ function lifecycleHarness({
   return {
     activate: () => source.hooks.activate.call(ctx),
     deactivate: () => source.hooks.deactivate.call(ctx),
+    setDomainUrl: (url) => {
+      currentUrl = url;
+    },
     calls,
     store,
   };
@@ -564,6 +568,22 @@ describe("hooks — the webhook route lifecycle", () => {
     assert.deepEqual(h.store.incumbentWebhook, {
       url: "https://old.example/hook",
     });
+  });
+
+  it("does not clobber the stored incumbent when activation repeats", async () => {
+    // A retried activate() sees this source's own endpoint already installed. Treating that
+    // as the incumbent would later "restore" an endpoint that no longer exists.
+    const h = lifecycleHarness({
+      domainUrl: "https://old.example/hook",
+    });
+    await h.activate();
+    h.setDomainUrl(ENDPOINT);
+    await h.activate();
+
+    assert.deepEqual(h.store.incumbentWebhook, {
+      url: "https://old.example/hook",
+    });
+    assert.equal(h.calls.filter((c) => c.op === "setWebhook").length, 2);
   });
 
   it("restores the incumbent webhook when this source still owns the route", async () => {
