@@ -408,7 +408,7 @@ describe("run() — the verification gate", () => {
 });
 
 describe("run() — absent bodyRaw (C2)", () => {
-  it("emits a signed delivery when the runtime provides no bodyRaw, logging why", async () => {
+  it("drops a delivery when the runtime provides no bodyRaw, logging why", async () => {
     const h = harness({
       db: {
         signingSecret: SECRET,
@@ -422,12 +422,12 @@ describe("run() — absent bodyRaw (C2)", () => {
     }));
     mock.restoreAll();
 
-    assert.equal(h.emitted.length, 1, "no bodyRaw ⇒ cannot verify ⇒ still emitted, never dropped");
+    assert.equal(h.emitted.length, 0, "no bodyRaw ⇒ nothing to verify against ⇒ dropped");
     assert.equal(h.responses.length, 1, "MailKite is still answered, so it stops retrying");
     assert.equal(h.responses[0].status, 200);
-    assert.equal(logs.length, 1, "the skipped check is logged, not silent");
+    assert.equal(logs.length, 1, "the rejection is logged, not silent");
     assert.match(logs[0], /bodyRaw/, "the log names the missing field");
-    assert.match(logs[0], /could not be \w+/, "the log says the signature was not checked");
+    assert.match(logs[0], /cannot be verified/, "the log says why it was dropped");
   });
 
   it("treats bodyRaw: null the same as absent", async () => {
@@ -444,7 +444,7 @@ describe("run() — absent bodyRaw (C2)", () => {
     }));
     mock.restoreAll();
 
-    assert.equal(h.emitted.length, 1);
+    assert.equal(h.emitted.length, 0);
     assert.equal(logs.length, 1);
     assert.match(logs[0], /bodyRaw/);
   });
@@ -471,9 +471,177 @@ describe("run() — absent bodyRaw (C2)", () => {
     }));
     mock.restoreAll();
 
-    // Pre-A1 behavior: with no secret there is nothing to verify, so the delivery passes
-    // through. The C2 gate only guards the verification path; it does not change this.
+    // With no secret there is nothing to verify, so the delivery passes through. The gate
+    // only guards the verification path; it does not change this.
     assert.equal(h.emitted.length, 1);
     assert.equal(logs.length, 0);
+  });
+});
+
+const ENDPOINT = "https://example.m.pipedream.net";
+
+/**
+ * Bind the source's activation/deactivation hooks to a `this` whose app methods are stubs.
+ *
+ * @param {object} [opts] - Harness options.
+ * @param {string|null} [opts.domainUrl] - What `getDomain()` reports as the route's URL.
+ * @param {object} [opts.db] - Seed values for `$.service.db`.
+ * @param {string} [opts.getDomainError] - Make `getDomain()` throw with this message.
+ * @returns {object} Harness.
+ */
+function lifecycleHarness({
+  domainUrl = ENDPOINT, db = {}, getDomainError,
+} = {}) {
+  const calls = [];
+  const store = {
+    ...db,
+  };
+  const ctx = {
+    domainId: "dom_9f21",
+    http: {
+      endpoint: ENDPOINT,
+    },
+    db: {
+      get: (k) => store[k],
+      set: (k, v) => {
+        store[k] = v;
+      },
+    },
+    mailkite: {
+      getDomain: async (args) => {
+        calls.push({
+          op: "getDomain",
+          ...args,
+        });
+        if (getDomainError) throw new Error(getDomainError);
+        return {
+          id: args.domainId,
+          webhookUrl: domainUrl,
+        };
+      },
+      setWebhook: async (args) => {
+        calls.push({
+          op: "setWebhook",
+          ...args,
+        });
+        return {
+          webhookUrl: args.data.url,
+          signingSecret: SECRET,
+        };
+      },
+      deleteWebhook: async (args) => {
+        calls.push({
+          op: "deleteWebhook",
+          ...args,
+        });
+        return {
+          ok: true,
+        };
+      },
+    },
+  };
+  return {
+    activate: () => source.hooks.activate.call(ctx),
+    deactivate: () => source.hooks.deactivate.call(ctx),
+    calls,
+    store,
+  };
+}
+
+describe("hooks — the webhook route lifecycle", () => {
+  it("registers with only the schema-supported `url` property", async () => {
+    const h = lifecycleHarness({
+      domainUrl: "https://old.example/hook",
+    });
+    await h.activate();
+
+    const put = h.calls.find((c) => c.op === "setWebhook");
+    assert.deepEqual(put.data, {
+      url: ENDPOINT,
+    }, "set-webhook-request accepts url only (additionalProperties: false)");
+    assert.equal(h.store.webhookUrl, ENDPOINT);
+    assert.equal(h.store.signingSecret, SECRET);
+    assert.deepEqual(h.store.incumbentWebhook, {
+      url: "https://old.example/hook",
+    });
+  });
+
+  it("restores the incumbent webhook when this source still owns the route", async () => {
+    const h = lifecycleHarness({
+      db: {
+        incumbentWebhook: {
+          url: "https://old.example/hook",
+        },
+        webhookUrl: ENDPOINT,
+      },
+    });
+    await h.deactivate();
+
+    const put = h.calls.find((c) => c.op === "setWebhook");
+    assert.deepEqual(put.data, {
+      url: "https://old.example/hook",
+    });
+    assert.equal(h.calls.some((c) => c.op === "deleteWebhook"), false);
+  });
+
+  it("deletes the route when the domain had no incumbent and we still own it", async () => {
+    const h = lifecycleHarness({
+      db: {
+        incumbentWebhook: null,
+        webhookUrl: ENDPOINT,
+      },
+    });
+    await h.deactivate();
+
+    assert.equal(h.calls.some((c) => c.op === "deleteWebhook"), true);
+    assert.equal(h.calls.some((c) => c.op === "setWebhook"), false);
+  });
+
+  it("skips cleanup when activation never registered a route", async () => {
+    const h = lifecycleHarness();
+    const logs = [];
+    mock.method(console, "log", (m) => logs.push(m));
+    await h.deactivate();
+    mock.restoreAll();
+
+    assert.equal(h.calls.length, 0, "nothing is read, restored, or deleted");
+    assert.match(logs.join("\n"), /never registered a webhook route/);
+  });
+
+  it("skips cleanup when the route no longer points at this source", async () => {
+    const h = lifecycleHarness({
+      domainUrl: "https://someone-else.example/hook",
+      db: {
+        incumbentWebhook: {
+          url: "https://old.example/hook",
+        },
+        webhookUrl: ENDPOINT,
+      },
+    });
+    const logs = [];
+    mock.method(console, "log", (m) => logs.push(m));
+    await h.deactivate();
+    mock.restoreAll();
+
+    assert.equal(h.calls.some((c) => c.op === "setWebhook"), false);
+    assert.equal(h.calls.some((c) => c.op === "deleteWebhook"), false);
+    assert.match(logs.join("\n"), /no longer points at this source/);
+  });
+
+  it("skips cleanup without throwing when the domain cannot be read", async () => {
+    const h = lifecycleHarness({
+      getDomainError: "404 Not Found",
+      db: {
+        webhookUrl: ENDPOINT,
+      },
+    });
+    const logs = [];
+    mock.method(console, "log", (m) => logs.push(m));
+    await h.deactivate();
+    mock.restoreAll();
+
+    assert.equal(h.calls.some((c) => c.op === "setWebhook"), false);
+    assert.equal(h.calls.some((c) => c.op === "deleteWebhook"), false);
+    assert.match(logs.join("\n"), /404 Not Found/);
   });
 });

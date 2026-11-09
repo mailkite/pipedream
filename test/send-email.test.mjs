@@ -332,6 +332,14 @@ describe("attachments", () => {
     ]), /must be an object/);
   });
 
+  it("rejects a null entry with the ConfigurationError, not a TypeError", () => {
+    // `"null"` in an Attachments entry parses to null; reading `.filename` off it would throw
+    // a TypeError instead of the promised ConfigurationError.
+    assert.throws(() => parseAttachments([
+      "null",
+    ]), /Attachment 1 must be an object/);
+  });
+
   it("rejects a string that is not JSON", () => {
     assert.throws(() => parseAttachments("invoice.pdf"), /must be valid JSON/);
   });

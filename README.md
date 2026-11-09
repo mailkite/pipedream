@@ -7,6 +7,7 @@ the **inbound-email wedge** that Pipedream's built-in triggers leave open.
   verified domain** (not a Pipedream-generated address). Signed `email.received` webhook with
   parsed `from` / `to` / `subject` / `text` / `html` / `threadId` / `auth` / `attachments`.
 - 📤 **Send Email** — send from a verified domain via one API call (templates, cc/bcc, reply-to).
+- 🗂 **List Templates** — find a saved `tpl_…` or premade `base_…` template id for **Send Email**.
 
 Why this matters: Pipedream's built-in *New Email* trigger only gives you a Pipedream-generated
 address. Receiving on your **own domain** otherwise means gluing AWS SES catch-all or Postmark
@@ -22,11 +23,18 @@ components/mailkite/
 ├── sources/email-received-instant/
 │   ├── email-received-instant.mjs         # the (Instant) webhook trigger
 │   └── test-event.mjs                     # sample email.received payload
-└── actions/send-email/
-    └── send-email.mjs                     # Send Email action
+└── actions/
+    ├── send-email/
+    │   └── send-email.mjs                 # Send Email action
+    └── list-templates/
+        └── list-templates.mjs             # List Templates action
 
 test/
 ├── email-received-instant.test.mjs        # signature + freshness + run() gate (node --test)
+├── deploy-backfill.test.mjs               # deploy() backfill selection + paging
+├── message-to-event.test.mjs              # list row → email.received mapper
+├── send-email.test.mjs                    # prop parsing + payload pruning
+├── registry-contract.test.mjs             # keys, action metadata, sample-event contract
 ├── register-stubs.mjs                     # --import entrypoint for the resolution hook
 ├── stub-loader.mjs                        # resolves @pipedream/platform locally
 └── stubs/pipedream-platform.mjs           # throwing stand-in — tests never hit the network

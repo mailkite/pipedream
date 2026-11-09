@@ -2,9 +2,9 @@
 // payload schema require of these files, asserted so they cannot drift back.
 //
 // Everything here was found BY drifting: the source key predated the past-tense `-instant`
-// convention, the source shipped without `annotations`, and `test-event.mjs` had lost
-// `receivedAt`/`receivedAtIso` (audit findings B1, B2, A4). Guidelines:
-// pipedream.com/docs/components/contributing/guidelines.
+// convention, the source carried an `annotations` object only actions may declare, and
+// `test-event.mjs` had lost `receivedAt`/`receivedAtIso` (audit findings B1, B2, A4).
+// Guidelines: pipedream.com/docs/components/contributing/guidelines.
 
 import assert from "node:assert/strict";
 import path from "node:path";
@@ -14,11 +14,13 @@ import {
 
 import source from "../components/mailkite/sources/email-received-instant/email-received-instant.mjs";
 import action from "../components/mailkite/actions/send-email/send-email.mjs";
+import listTemplates from "../components/mailkite/actions/list-templates/list-templates.mjs";
 import sampleEmit from "../components/mailkite/sources/email-received-instant/test-event.mjs";
 
 const APP = "mailkite";
 const SOURCE_DIR = "components/mailkite/sources/email-received-instant";
 const ACTION_DIR = "components/mailkite/actions/send-email";
+const LIST_TEMPLATES_DIR = "components/mailkite/actions/list-templates";
 
 /**
  * Assert a component's key matches the folder and file it lives in — "the name of the folder
@@ -54,23 +56,27 @@ describe("component keys (B1)", () => {
   it("names the action folder and file after its key", () => {
     assertKeyMatchesPath(action, ACTION_DIR);
   });
+
+  it("names the List Templates action after its key", () => {
+    assertKeyMatchesPath(listTemplates, LIST_TEMPLATES_DIR);
+  });
 });
 
-describe("annotations (B2)", () => {
+describe("action metadata", () => {
   for (const [
     label,
     component,
   ] of [
     [
-      "source",
-      source,
-    ],
-    [
-      "action",
+      "Send Email",
       action,
     ],
+    [
+      "List Templates",
+      listTemplates,
+    ],
   ]) {
-    it(`declares all three hints on the ${label}`, () => {
+    it(`declares all three hints on ${label}`, () => {
       const a = component.annotations;
       assert.ok(a, `${label} has an annotations object`);
       for (const hint of [
@@ -81,14 +87,29 @@ describe("annotations (B2)", () => {
         assert.equal(typeof a[hint], "boolean", `${hint} is a boolean`);
       }
     });
+
+    it(`declares ai: "optimized" on ${label}`, () => {
+      // "Every action that is created or modified must declare the top-level property
+      // ai: \"optimized\" in its default export."
+      assert.equal(component.ai, "optimized");
+    });
   }
 
-  it("declares the source as writing, not read-only", () => {
-    // activate()/deactivate() PUT the domain's catch-all webhook route, so the source is not
-    // read-only — but it restores the incumbent instead of dropping it, so not destructive.
-    assert.equal(source.annotations.readOnlyHint, false);
-    assert.equal(source.annotations.destructiveHint, false);
-    assert.equal(source.annotations.openWorldHint, true);
+  it("keeps the source free of annotations", () => {
+    // "Source components must NOT include an annotations object."
+    assert.equal(source.annotations, undefined);
+  });
+
+  it("marks the Send Email action as writing, not read-only", () => {
+    assert.equal(action.annotations.readOnlyHint, false);
+    assert.equal(action.annotations.destructiveHint, false);
+    assert.equal(action.annotations.openWorldHint, true);
+  });
+
+  it("marks List Templates as read-only", () => {
+    assert.equal(listTemplates.annotations.readOnlyHint, true);
+    assert.equal(listTemplates.annotations.destructiveHint, false);
+    assert.equal(listTemplates.annotations.openWorldHint, true);
   });
 });
 
@@ -187,6 +208,7 @@ describe("versioning (B5)", () => {
     for (const component of [
       source,
       action,
+      listTemplates,
     ]) {
       assert.match(component.version, /^\d+\.\d+\.\d+$/, `${component.key} version is semver`);
     }

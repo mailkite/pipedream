@@ -352,8 +352,42 @@ describe("listBackfillRows — bounds", () => {
     assert.equal(h.listCalls.length, BACKFILL_MAX_PAGES);
   });
 
-  it("stops when the cursor cannot advance, rather than spinning", async () => {
-    // Pathological but cheap to guard: a page of rows already seen means no progress.
+  it("steps below a >1-page timestamp bucket to reach older mail", async () => {
+    // `before` is a `<` cursor on `received_at`, so when a full page is entirely one
+    // millisecond the seen-set cannot move it. Stepping strictly below the bucket reaches the
+    // older mail instead of ending the backfill there. Rows in that bucket past the first page
+    // are unreachable through this API, and the log says so.
+    const bucket = rows(BACKFILL_PAGE_SIZE, {
+      to_addr: "hello@other-domain.test",
+      received_at: T0,
+    });
+    const logs = [];
+    mock.method(console, "log", (m) => logs.push(m));
+    const h = harness({
+      pages: [
+        bucket,
+        bucket,
+        [
+          listRow({
+            id: "msg_older",
+            received_at: T0 - 1,
+          }),
+        ],
+      ],
+    });
+    const selected = await h.listBackfillRows();
+    mock.restoreAll();
+
+    assert.equal(h.listCalls[1].before, T0 + 1, "first retry keeps same-millisecond rows");
+    assert.equal(h.listCalls[2].before, T0, "then steps strictly below the stuck bucket");
+    assert.deepEqual(selected.map((r) => r.id), [
+      "msg_older",
+    ]);
+    assert.match(logs.join("\n"), /timestamp bucket/);
+  });
+
+  it("stops when stepping below a bucket makes no progress", async () => {
+    // If the API ignores the cursor and hands back the same bucket, stop rather than spin.
     const page = rows(BACKFILL_PAGE_SIZE, {
       to_addr: "hello@other-domain.test",
       received_at: T0,
@@ -362,10 +396,11 @@ describe("listBackfillRows — bounds", () => {
       pages: [
         page,
         page,
+        page,
       ],
     });
     assert.deepEqual(await h.listBackfillRows(), []);
-    assert.equal(h.listCalls.length, 2);
+    assert.equal(h.listCalls.length, 3);
   });
 });
 
